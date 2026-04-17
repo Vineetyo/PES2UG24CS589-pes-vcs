@@ -203,5 +203,13 @@ int tree_from_index(ObjectID *id_out) {
     }
 
     (void)id_out;
+    // Add at end (before return)
+
+void *data;
+size_t len;
+
+if (tree_serialize(&tree, &data, &len) != 0) {
+    return -1;
+}
     return -1;
 }
