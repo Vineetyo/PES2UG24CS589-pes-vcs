@@ -132,6 +132,7 @@ int tree_serialize(const Tree *tree, void **data_out, size_t *len_out) {
 int tree_from_index(ObjectID *id_out) {
     Index index;
 
+    // Step 1: Load index
     if (index_load(&index) != 0) {
         return -1;
     }
@@ -139,23 +140,28 @@ int tree_from_index(ObjectID *id_out) {
     Tree tree;
     tree.count = 0;
 
+    // Step 2: Build tree (root + single-level subtrees)
     for (int i = 0; i < index.count; i++) {
         const char *path = index.entries[i].path;
         char *slash = strchr(path, '/');
 
         if (!slash) {
+            // Root-level file
             TreeEntry *entry = &tree.entries[tree.count++];
 
             entry->mode = index.entries[i].mode;
             entry->hash = index.entries[i].hash;
-            strcpy(entry->name, path);
+            strncpy(entry->name, path, sizeof(entry->name));
+            entry->name[sizeof(entry->name) - 1] = '\0';
         } else {
+            // Directory detected
             size_t dir_len = slash - path;
 
             char dirname[256];
             strncpy(dirname, path, dir_len);
             dirname[dir_len] = '\0';
 
+            // Build subtree for this directory
             Tree subtree;
             subtree.count = 0;
 
@@ -165,26 +171,34 @@ int tree_from_index(ObjectID *id_out) {
 
                     const char *subname = index.entries[j].path + dir_len + 1;
 
+                    // Skip deeper nesting (only 1 level supported)
                     if (strchr(subname, '/')) continue;
 
                     TreeEntry *sub = &subtree.entries[subtree.count++];
+
                     sub->mode = index.entries[j].mode;
                     sub->hash = index.entries[j].hash;
-                    strcpy(sub->name, subname);
+                    strncpy(sub->name, subname, sizeof(sub->name));
+                    sub->name[sizeof(sub->name) - 1] = '\0';
                 }
             }
 
-            void *data;
-            size_t len;
-            if (tree_serialize(&subtree, &data, &len) != 0) return -1;
-
-            ObjectID sub_id;
-            if (object_write(OBJ_TREE, data, len, &sub_id) != 0) {
-                free(data);
+            // Serialize subtree
+            void *sub_data;
+            size_t sub_len;
+            if (tree_serialize(&subtree, &sub_data, &sub_len) != 0) {
                 return -1;
             }
-            free(data);
 
+            // Write subtree object
+            ObjectID sub_id;
+            if (object_write(OBJ_TREE, sub_data, sub_len, &sub_id) != 0) {
+                free(sub_data);
+                return -1;
+            }
+            free(sub_data);
+
+            // Avoid duplicate directory entries
             int exists = 0;
             for (int k = 0; k < tree.count; k++) {
                 if (strcmp(tree.entries[k].name, dirname) == 0) {
@@ -195,21 +209,33 @@ int tree_from_index(ObjectID *id_out) {
 
             if (!exists) {
                 TreeEntry *entry = &tree.entries[tree.count++];
-                entry->mode = 0040000;
+
+                entry->mode = 0040000; // directory
                 entry->hash = sub_id;
-                strcpy(entry->name, dirname);
+                strncpy(entry->name, dirname, sizeof(entry->name));
+                entry->name[sizeof(entry->name) - 1] = '\0';
             }
         }
     }
 
-    (void)id_out;
-    // Add at end (before return)
+    // Step 3: Serialize root tree
+    void *data;
+    size_t len;
 
-void *data;
-size_t len;
+    if (tree_serialize(&tree, &data, &len) != 0) {
+        return -1;
+    }
 
-if (tree_serialize(&tree, &data, &len) != 0) {
-    return -1;
-}
-    return -1;
+    // Step 4: Write root tree object
+    ObjectID id;
+    if (object_write(OBJ_TREE, data, len, &id) != 0) {
+        free(data);
+        return -1;
+    }
+
+    free(data);
+
+    // Step 5: Return root tree ID
+    *id_out = id;
+    return 0;
 }
