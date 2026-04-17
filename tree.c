@@ -141,7 +141,6 @@ int tree_from_index(ObjectID *id_out) {
 
     for (int i = 0; i < index.count; i++) {
         const char *path = index.entries[i].path;
-
         char *slash = strchr(path, '/');
 
         if (!slash) {
@@ -149,20 +148,46 @@ int tree_from_index(ObjectID *id_out) {
 
             entry->mode = index.entries[i].mode;
             entry->hash = index.entries[i].hash;
-            strncpy(entry->name, path, sizeof(entry->name));
-            entry->name[sizeof(entry->name) - 1] = '\0';
+            strcpy(entry->name, path);
         } else {
-            // Directory detected
             size_t dir_len = slash - path;
 
             char dirname[256];
             strncpy(dirname, path, dir_len);
             dirname[dir_len] = '\0';
 
-            // Add directory entry (temporary hash)
+            Tree subtree;
+            subtree.count = 0;
+
+            for (int j = 0; j < index.count; j++) {
+                if (strncmp(index.entries[j].path, dirname, dir_len) == 0 &&
+                    index.entries[j].path[dir_len] == '/') {
+
+                    const char *subname = index.entries[j].path + dir_len + 1;
+
+                    if (strchr(subname, '/')) continue;
+
+                    TreeEntry *sub = &subtree.entries[subtree.count++];
+                    sub->mode = index.entries[j].mode;
+                    sub->hash = index.entries[j].hash;
+                    strcpy(sub->name, subname);
+                }
+            }
+
+            void *data;
+            size_t len;
+            if (tree_serialize(&subtree, &data, &len) != 0) return -1;
+
+            ObjectID sub_id;
+            if (object_write(OBJ_TREE, data, len, &sub_id) != 0) {
+                free(data);
+                return -1;
+            }
+            free(data);
+
             int exists = 0;
-            for (int j = 0; j < tree.count; j++) {
-                if (strcmp(tree.entries[j].name, dirname) == 0) {
+            for (int k = 0; k < tree.count; k++) {
+                if (strcmp(tree.entries[k].name, dirname) == 0) {
                     exists = 1;
                     break;
                 }
@@ -170,8 +195,8 @@ int tree_from_index(ObjectID *id_out) {
 
             if (!exists) {
                 TreeEntry *entry = &tree.entries[tree.count++];
-                entry->mode = 0040000; // directory
-                memset(&entry->hash, 0, sizeof(ObjectID)); // placeholder
+                entry->mode = 0040000;
+                entry->hash = sub_id;
                 strcpy(entry->name, dirname);
             }
         }
