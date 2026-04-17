@@ -142,14 +142,39 @@ int tree_from_index(ObjectID *id_out) {
     for (int i = 0; i < index.count; i++) {
         const char *path = index.entries[i].path;
 
-        if (strchr(path, '/') != NULL) continue;
+        char *slash = strchr(path, '/');
 
-        TreeEntry *entry = &tree.entries[tree.count++];
+        if (!slash) {
+            TreeEntry *entry = &tree.entries[tree.count++];
 
-        entry->mode = index.entries[i].mode;
-        entry->hash = index.entries[i].hash;
-        strncpy(entry->name, path, sizeof(entry->name));
-        entry->name[sizeof(entry->name) - 1] = '\0';
+            entry->mode = index.entries[i].mode;
+            entry->hash = index.entries[i].hash;
+            strncpy(entry->name, path, sizeof(entry->name));
+            entry->name[sizeof(entry->name) - 1] = '\0';
+        } else {
+            // Directory detected
+            size_t dir_len = slash - path;
+
+            char dirname[256];
+            strncpy(dirname, path, dir_len);
+            dirname[dir_len] = '\0';
+
+            // Add directory entry (temporary hash)
+            int exists = 0;
+            for (int j = 0; j < tree.count; j++) {
+                if (strcmp(tree.entries[j].name, dirname) == 0) {
+                    exists = 1;
+                    break;
+                }
+            }
+
+            if (!exists) {
+                TreeEntry *entry = &tree.entries[tree.count++];
+                entry->mode = 0040000; // directory
+                memset(&entry->hash, 0, sizeof(ObjectID)); // placeholder
+                strcpy(entry->name, dirname);
+            }
+        }
     }
 
     (void)id_out;
