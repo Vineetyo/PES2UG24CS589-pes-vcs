@@ -267,12 +267,25 @@ int object_read(const ObjectID *id, ObjectType *type_out,
         return -1;
     }
 
+    uint8_t *data_start = null_ptr + 1;
+    size_t data_len = file_size - (header_len + 1);
+
+    if (data_len != size) {
+        free(buf);
+        return -1;
+    }
+
+    void *data = malloc(data_len);
+    if (!data) {
+        free(buf);
+        return -1;
+    }
+
+    memcpy(data, data_start, data_len);
+
+    *data_out = data;
+    *len_out = data_len;
+
     free(buf);
-    (void)data_out;
-    (void)len_out;
-    return -1;
-}
-    (void)data_out;
-    (void)len_out;
-    return -1;
+    return 0;
 }
