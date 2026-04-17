@@ -179,6 +179,11 @@ int index_load(Index *index) {
 //   - rename                           : atomically moving the temp file over the old index
 //
 // Returns 0 on success, -1 on error.
+static int compare_entries(const void *a, const void *b) {
+    return strcmp(((const IndexEntry *)a)->path,
+                  ((const IndexEntry *)b)->path);
+}
+
 int index_save(const Index *index) {
     char tmp_path[512];
     snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", INDEX_FILE);
@@ -186,9 +191,26 @@ int index_save(const Index *index) {
     FILE *f = fopen(tmp_path, "w");
     if (!f) return -1;
 
+    Index sorted = *index;
+    qsort(sorted.entries, sorted.count, sizeof(IndexEntry), compare_entries);
+
+    for (int i = 0; i < sorted.count; i++) {
+        char hex[HASH_HEX_SIZE + 1];
+        hash_to_hex(&sorted.entries[i].hash, hex);
+
+        fprintf(f, "%o %s %lu %u %s\n",
+                sorted.entries[i].mode,
+                hex,
+                sorted.entries[i].mtime_sec,
+                sorted.entries[i].size,
+                sorted.entries[i].path);
+    }
+
+    fflush(f);
+    fsync(fileno(f));
     fclose(f);
-    (void)index;
-    return -1;
+
+    return rename(tmp_path, INDEX_FILE);
 }
 
 // Stage a file for the next commit.
