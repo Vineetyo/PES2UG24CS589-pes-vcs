@@ -139,6 +139,19 @@ int tree_from_index(ObjectID *id_out) {
     Tree tree;
     tree.count = 0;
 
+    for (int i = 0; i < index.count; i++) {
+        const char *path = index.entries[i].path;
+
+        if (strchr(path, '/') != NULL) continue;
+
+        TreeEntry *entry = &tree.entries[tree.count++];
+
+        entry->mode = index.entries[i].mode;
+        entry->hash = index.entries[i].hash;
+        strncpy(entry->name, path, sizeof(entry->name));
+        entry->name[sizeof(entry->name) - 1] = '\0';
+    }
+
     (void)id_out;
     return -1;
 }
