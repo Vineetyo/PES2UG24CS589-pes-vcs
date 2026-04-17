@@ -136,6 +136,9 @@ int tree_from_index(ObjectID *id_out) {
         return -1;
     }
 
+    Tree tree;
+    tree.count = 0;
+
     (void)id_out;
     return -1;
 }
