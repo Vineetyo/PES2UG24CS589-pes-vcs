@@ -99,28 +99,64 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
     else if (type == OBJ_TREE)   type_str = "tree";
     else if (type == OBJ_COMMIT) type_str = "commit";
     else return -1;
- 
+
+    // Step 1: Build header
     char header[64];
     int header_len = snprintf(header, sizeof(header), "%s %zu", type_str, len);
-    
- 
-    size_t full_len = (size_t)header_len + 1 + len;  
+
+    size_t full_len = (size_t)header_len + 1 + len;
     uint8_t *full_obj = malloc(full_len);
     if (!full_obj) return -1;
- 
+
     memcpy(full_obj, header, (size_t)header_len + 1);
     memcpy(full_obj + header_len + 1, data, len);
- //phase 1 commit 2
+
+    // Step 2: Compute hash
     ObjectID id;
     compute_hash(full_obj, full_len, &id);
- 
 
+    // Step 3: Deduplication
     if (object_exists(&id)) {
         *id_out = id;
         free(full_obj);
         return 0;
     }
- 
+
+    // Step 4: Create shard directory
+    char obj_path[512];
+    object_path(&id, obj_path, sizeof(obj_path));
+
+    char dir_path[512];
+    strcpy(dir_path, obj_path);
+    char *slash = strrchr(dir_path, '/');
+    if (!slash) {
+        free(full_obj);
+        return -1;
+    }
+    *slash = '\0';
+
+    mkdir(dir_path, 0755);
+
+    // Step 5: Write to temp file
+    char tmp_path[520];
+    snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", obj_path);
+
+    int fd = open(tmp_path, O_CREAT | O_WRONLY | O_TRUNC, 0644);
+    if (fd < 0) {
+        free(full_obj);
+        return -1;
+    }
+
+    ssize_t written = write(fd, full_obj, full_len);
+    if (written != (ssize_t)full_len) {
+        close(fd);
+        free(full_obj);
+        return -1;
+    }
+
+    close(fd);
+
+    // Steps 6–9 not implemented yet
     free(full_obj);
     return -1;
 }
