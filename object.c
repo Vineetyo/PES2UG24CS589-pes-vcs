@@ -154,13 +154,25 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
         return -1;
     }
 
+    // Step 6: fsync temp file (ensure data is on disk)
+    if (fsync(fd) < 0) {
+        close(fd);
+        free(full_obj);
+        return -1;
+    }
+
     close(fd);
 
-    // Steps 6–9 not implemented yet
+    // Step 7: Atomic rename to final path
+    if (rename(tmp_path, obj_path) != 0) {
+        free(full_obj);
+        return -1;
+    }
+
+    // Steps 8–9 not implemented yet
     free(full_obj);
     return -1;
 }
-
 
 // Read an object from the store.
 //
