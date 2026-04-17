@@ -110,7 +110,7 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
  
     memcpy(full_obj, header, (size_t)header_len + 1);
     memcpy(full_obj + header_len + 1, data, len);
- 
+ //phase 1 commit 2
     ObjectID id;
     compute_hash(full_obj, full_len, &id);
  
