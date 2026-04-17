@@ -154,7 +154,7 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
         return -1;
     }
 
-    // Step 6: fsync temp file (ensure data is on disk)
+    // Step 6: fsync temp file
     if (fsync(fd) < 0) {
         close(fd);
         free(full_obj);
@@ -163,15 +163,24 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
 
     close(fd);
 
-    // Step 7: Atomic rename to final path
+    // Step 7: Atomic rename
     if (rename(tmp_path, obj_path) != 0) {
         free(full_obj);
         return -1;
     }
 
-    // Steps 8–9 not implemented yet
+    // Step 8: fsync the directory to persist rename
+    int dir_fd = open(dir_path, O_DIRECTORY);
+    if (dir_fd >= 0) {
+        fsync(dir_fd);
+        close(dir_fd);
+    }
+
+    // Step 9: Return object ID
+    *id_out = id;
+
     free(full_obj);
-    return -1;
+    return 0;
 }
 
 // Read an object from the store.
