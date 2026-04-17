@@ -226,6 +226,12 @@ int index_add(Index *index, const char *path) {
     FILE *f = fopen(path, "rb");
     if (!f) return -1;
 
+    struct stat st;
+    if (stat(path, &st) != 0) {
+        fclose(f);
+        return -1;
+    }
+
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
     rewind(f);
@@ -247,6 +253,19 @@ int index_add(Index *index, const char *path) {
 
     free(data);
 
-    (void)index;
-    return -1;
+    IndexEntry *entry = index_find(index, path);
+
+    if (!entry) {
+        entry = &index->entries[index->count++];
+    }
+
+    entry->mode = st.st_mode;
+    entry->hash = id;
+    entry->mtime_sec = st.st_mtime;
+    entry->size = st.st_size;
+
+    strncpy(entry->path, path, sizeof(entry->path));
+    entry->path[sizeof(entry->path) - 1] = '\0';
+
+    return index_save(index);
 }
